@@ -1,3 +1,9 @@
 <Solution>
-  <Project Path="DoubleSkinRevit/DoubleSkinRevit.csproj" Id="f124400a-3cc5-4e8e-8464-eeacda6a0ddd" />
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+  </Configurations>
+  <Project Path="DoubleSkinRevit/DoubleSkinRevit.csproj" Id="f124400a-3cc5-4e8e-8464-eeacda6a0ddd">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
 </Solution>
