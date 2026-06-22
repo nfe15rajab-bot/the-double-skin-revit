@@ -23,7 +23,7 @@ namespace DoubleSkinRevit
             string jsonPath = null;
             using (OpenFileDialog jsonDialog = new OpenFileDialog())
             {
-                
+
                 jsonDialog.Title = "Select JSON file from the double skin";
                 jsonDialog.Filter = "JSON files|*.json";
                 if (jsonDialog.ShowDialog() != DialogResult.OK)
@@ -33,7 +33,7 @@ namespace DoubleSkinRevit
             // select DXF
             string dxfPath = null;
             using (OpenFileDialog dxfDialog = new OpenFileDialog())
-            { 
+            {
                 dxfDialog.Title = "Select DXF file for the double skin";
                 dxfDialog.Filter = "DXF files|*.dxf";
                 if (dxfDialog.ShowDialog() != DialogResult.OK) return Result.Cancelled;
@@ -56,7 +56,7 @@ namespace DoubleSkinRevit
             double gridWidthM = double.Parse(data.pattern.gridWidthM.ToString());
             double gridHeightM = double.Parse(data.pattern.gridHeightM.ToString());
 
-            
+
             //confirm to user 
             TaskDialog.Show("Double skin importer",
                 $"JSON loaded : {Path.GetFileName(jsonPath)}\n" +
@@ -66,12 +66,12 @@ namespace DoubleSkinRevit
                 $"Grid: {gridWidthM}m x {gridHeightM}m\n" +
                 $"Void ratio : {voidRatio}%"
                 );
-                List<List<XYZ>> polylines = ParseDxfPolylines(dxfPath);
-                if (polylines.Count == 0)
-                {
-                    TaskDialog.Show("Double Skin", "No polylines found in DXF.");
-                    return Result.Failed;
-                }
+            List<List<XYZ>> polylines = ParseDxfPolylines(dxfPath);
+            if (polylines.Count == 0)
+            {
+                TaskDialog.Show("Double Skin", "No polylines found in DXF.");
+                return Result.Failed;
+            }
             TaskDialog.Show("Double skin", $"Parsed {polylines.Count} polylines successfully.");
             Document doc = commandData.Application.ActiveUIDocument.Document;
             if (!doc.IsFamilyDocument)
@@ -83,14 +83,15 @@ namespace DoubleSkinRevit
             using (Transaction tx = new Transaction(doc, "Double skin: import perforations"))
             {
                 tx.Start();
-                Plane plane = Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero);
-                SketchPlane sketchPlane = SketchPlane.Create(doc, plane);
+                //Plane plane = Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero);
+                SketchPlane sketchPlane = SketchPlane.Create(doc, Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero));
 
                 double depthFeet = 50.0 * MM_TO_FEET;
 
-                int created =  0; 
-                foreach (List<XYZ> verts in polylines) {
-                try
+                int created = 0;
+                foreach (List<XYZ> verts in polylines)
+                {
+                    try
                     {
                         CurveLoop loop = VertsToCurveLoop(verts);
                         CurveArray curveArray = CurveLoopToCurveArray(loop);
@@ -109,12 +110,55 @@ namespace DoubleSkinRevit
                 TaskDialog.Show("Double Skin", $"Done +_+ Created {created} void extrusions.");
 
             }
-            
-            
-            
-            return Result.Succeeded;
+            using (Transaction tx2 = new Transaction(doc, "double skin: apply cuts :{"))
+            {
+                tx2.Start();
 
+                FilteredElementCollector collector = new FilteredElementCollector(doc);
+                collector.WhereElementIsNotElementType();
+                collector.OfClass(typeof(Extrusion));
+
+                Element solid = null;
+                List<Element> voids = new List<Element>();
+                foreach(Element e in collector)
+                {
+                    Extrusion ext = e as Extrusion;
+                    if (ext == null) continue;
+                    if (ext.IsSolid)
+                        solid = ext;
+                    else
+                        voids.Add(ext);
+                }
+
+
+
+                
+                if (solid != null)
+                {
+                    int cuts = 0;
+                    string lastError = "";
+                   
+                    foreach (Element v in voids)
+
+                    {
+
+                        try { SolidSolidCutUtils.AddCutBetweenSolids(doc, solid, v);
+                            cuts++;
+
+                        }
+                        catch (Exception ex) { lastError = ex.Message; }
+                    }
+                    TaskDialog.Show("Cut result", $"Cuts applied: {cuts}\nLast error:{lastError}");
+                }
+                tx2.Commit();
+            }
+
+
+
+            return Result.Succeeded;
         }
+
+   
 
         //parse dxf data
         private const double MM_TO_FEET = 1.0 / 304.8;
