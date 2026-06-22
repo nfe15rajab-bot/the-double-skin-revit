@@ -6,6 +6,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
+
 //using System.Runtime.CompilerServices;
 using System.Windows.Forms;
 
@@ -54,7 +56,7 @@ namespace DoubleSkinRevit
             double gridWidthM = double.Parse(data.pattern.gridWidthM.ToString());
             double gridHeightM = double.Parse(data.pattern.gridHeightM.ToString());
 
-
+            
             //confirm to user 
             TaskDialog.Show("Double skin importer",
                 $"JSON loaded : {Path.GetFileName(jsonPath)}\n" +
@@ -64,7 +66,52 @@ namespace DoubleSkinRevit
                 $"Grid: {gridWidthM}m x {gridHeightM}m\n" +
                 $"Void ratio : {voidRatio}%"
                 );
+                List<List<XYZ>> polylines = ParseDxfPolylines(dxfPath);
+                if (polylines.Count == 0)
+                {
+                    TaskDialog.Show("Double Skin", "No polylines found in DXF.");
+                    return Result.Failed;
+                }
+            TaskDialog.Show("Double skin", $"Parsed {polylines.Count} polylines successfully.");
+            Document doc = commandData.Application.ActiveUIDocument.Document;
+            if (!doc.IsFamilyDocument)
+            {
+                TaskDialog.Show("Double skin", "Please open a .rfa family file first");
+                return Result.Failed;
 
+            }
+            using (Transaction tx = new Transaction(doc, "Double skin: import perforations"))
+            {
+                tx.Start();
+                Plane plane = Plane.CreateByNormalAndOrigin(XYZ.BasisZ, XYZ.Zero);
+                SketchPlane sketchPlane = SketchPlane.Create(doc, plane);
+
+                double depthFeet = 50.0 * MM_TO_FEET;
+
+                int created =  0; 
+                foreach (List<XYZ> verts in polylines) {
+                try
+                    {
+                        CurveLoop loop = VertsToCurveLoop(verts);
+                        CurveArray curveArray = CurveLoopToCurveArray(loop);
+                        CurveArrArray profile = new CurveArrArray();
+                        profile.Append(curveArray);
+                        doc.FamilyCreate.NewExtrusion(false, profile, sketchPlane, depthFeet);
+                        created++;
+
+                    }
+                    catch { }
+
+
+                }
+                tx.Commit();
+
+                TaskDialog.Show("Double Skin", $"Done +_+ Created {created} void extrusions.");
+
+            }
+            
+            
+            
             return Result.Succeeded;
 
         }
@@ -78,7 +125,7 @@ namespace DoubleSkinRevit
 
             bool inLWPoly = false;
             var verts = new List<XYZ>();
-            double x = 0, y = 0;
+            double x = 0;
             bool hasX = false;
 
             for (int i = 0; i < lines.Length - 1; i++){
