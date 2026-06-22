@@ -97,7 +97,7 @@ namespace DoubleSkinRevit
                         CurveArray curveArray = CurveLoopToCurveArray(loop);
                         CurveArrArray profile = new CurveArrArray();
                         profile.Append(curveArray);
-                        doc.FamilyCreate.NewExtrusion(false, profile, sketchPlane, depthFeet);
+                        doc.FamilyCreate.NewExtrusion(true, profile, sketchPlane, depthFeet);
                         created++;
 
                     }
@@ -129,7 +129,10 @@ namespace DoubleSkinRevit
                     else
                         voids.Add(ext);
                 }
-
+                TaskDialog.Show("Debug",
+                    $"Solid found: {solid != null}\n" +
+                    $"Voids found: {voids.Count}\n" +
+                    $"Total extrusions collected: {collector.Count()}");
 
 
                 
